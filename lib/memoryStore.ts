@@ -42,6 +42,14 @@ export function updateUser(id: string, updates: Partial<Pick<MemoryUser, 'name' 
   return user;
 }
 
+export function deleteUser(id: string): boolean {
+  const index = store.users.findIndex((user) => user.id === id);
+  if (index === -1) return false;
+  store.users.splice(index, 1);
+  delete store.conversations[id];
+  return true;
+}
+
 export function getMessages(userId: string): ChatMessage[] {
   return store.conversations[userId] ?? [];
 }

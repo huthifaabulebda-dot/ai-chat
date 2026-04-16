@@ -38,20 +38,36 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  if (!process.env.JWT_SECRET) {
-    return NextResponse.json({ error: 'Server is missing JWT_SECRET configuration.' }, { status: 500 });
+  let useMemoryStore = false;
+  let userId = '';
+  const isGuest = token.startsWith('guest:');
+
+  if (isGuest) {
+    userId = token.replace('guest:', '');
+    useMemoryStore = true;
+  } else {
+    if (!process.env.JWT_SECRET) {
+      return NextResponse.json({ error: 'Server is missing JWT_SECRET configuration.' }, { status: 500 });
+    }
   }
 
-  let useMemoryStore = false;
   try {
-    await dbConnect();
+    if (!isGuest) {
+      await dbConnect();
+    }
   } catch (error) {
     useMemoryStore = true;
     console.warn('MongoDB unavailable; using memory store for chat POST.', error);
   }
 
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET) as { id: string };
+    if (!isGuest) {
+      const decoded = jwt.verify(token, process.env.JWT_SECRET as string) as jwt.JwtPayload;
+      if (!decoded || typeof decoded !== 'object' || typeof decoded.id !== 'string') {
+        throw new jwt.JsonWebTokenError('Invalid token');
+      }
+      userId = decoded.id;
+    }
     const { message } = await request.json();
 
     if (!message) {
@@ -61,16 +77,16 @@ export async function POST(request: NextRequest) {
     const aiResponse = await getAIResponse(message);
 
     if (useMemoryStore) {
-      appendMessages(decoded.id, [
+      appendMessages(userId, [
         { role: 'user', content: message },
         { role: 'assistant', content: aiResponse },
       ]);
       return NextResponse.json({ response: aiResponse });
     }
 
-    let conversation = await Conversation.findOne({ userId: decoded.id });
+    let conversation = await Conversation.findOne({ userId });
     if (!conversation) {
-      conversation = new Conversation({ userId: decoded.id, messages: [] });
+      conversation = new Conversation({ userId, messages: [] });
     }
     conversation.messages.push({ role: 'user', content: message });
     conversation.messages.push({ role: 'assistant', content: aiResponse });
@@ -78,7 +94,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ response: aiResponse });
   } catch (error) {
-    if (error instanceof jwt.JsonWebTokenError) {
+    if (!isGuest && error instanceof jwt.JsonWebTokenError) {
       return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
     }
     if (error instanceof Error && error.message === 'missing_groq_api_key') {
@@ -119,31 +135,47 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  if (!process.env.JWT_SECRET) {
-    return NextResponse.json({ error: 'Server is missing JWT_SECRET configuration.' }, { status: 500 });
+  let useMemoryStore = false;
+  let userId = '';
+  const isGuest = token.startsWith('guest:');
+
+  if (isGuest) {
+    userId = token.replace('guest:', '');
+    useMemoryStore = true;
+  } else {
+    if (!process.env.JWT_SECRET) {
+      return NextResponse.json({ error: 'Server is missing JWT_SECRET configuration.' }, { status: 500 });
+    }
   }
 
-  let useMemoryStore = false;
   try {
-    await dbConnect();
+    if (!isGuest) {
+      await dbConnect();
+    }
   } catch (error) {
     useMemoryStore = true;
     console.warn('MongoDB unavailable; using memory store for chat GET.', error);
   }
 
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET) as { id: string };
-
-    if (useMemoryStore) {
-      return NextResponse.json({ messages: getMessages(decoded.id) });
+    if (!isGuest) {
+      const decoded = jwt.verify(token, process.env.JWT_SECRET as string) as jwt.JwtPayload;
+      if (!decoded || typeof decoded !== 'object' || typeof decoded.id !== 'string') {
+        throw new jwt.JsonWebTokenError('Invalid token');
+      }
+      userId = decoded.id;
     }
 
-    const conversation = await Conversation.findOne({ userId: decoded.id });
+    if (useMemoryStore) {
+      return NextResponse.json({ messages: getMessages(userId) });
+    }
+
+    const conversation = await Conversation.findOne({ userId });
     const messages = conversation ? conversation.messages : [];
 
     return NextResponse.json({ messages });
   } catch (error) {
-    if (error instanceof jwt.JsonWebTokenError) {
+    if (!isGuest && error instanceof jwt.JsonWebTokenError) {
       return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
     }
     console.error('Chat GET error:', error);
@@ -157,28 +189,44 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  if (!process.env.JWT_SECRET) {
-    return NextResponse.json({ error: 'Server is missing JWT_SECRET configuration.' }, { status: 500 });
+  let useMemoryStore = false;
+  let userId = '';
+  const isGuest = token.startsWith('guest:');
+
+  if (isGuest) {
+    userId = token.replace('guest:', '');
+    useMemoryStore = true;
+  } else {
+    if (!process.env.JWT_SECRET) {
+      return NextResponse.json({ error: 'Server is missing JWT_SECRET configuration.' }, { status: 500 });
+    }
   }
 
-  let useMemoryStore = false;
   try {
-    await dbConnect();
+    if (!isGuest) {
+      await dbConnect();
+    }
   } catch (error) {
     useMemoryStore = true;
     console.warn('MongoDB unavailable; using memory store for chat DELETE.', error);
   }
 
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET) as { id: string };
+    if (!isGuest) {
+      const decoded = jwt.verify(token, process.env.JWT_SECRET as string) as jwt.JwtPayload;
+      if (!decoded || typeof decoded !== 'object' || typeof decoded.id !== 'string') {
+        throw new jwt.JsonWebTokenError('Invalid token');
+      }
+      userId = decoded.id;
+    }
 
     if (useMemoryStore) {
-      clearMessages(decoded.id);
+      clearMessages(userId);
       return NextResponse.json({ success: true });
     }
 
     await Conversation.findOneAndUpdate(
-      { userId: decoded.id },
+      { userId },
       { $set: { messages: [] } },
       { upsert: true, new: true }
     );
