@@ -139,7 +139,7 @@ export default function Chat({ token, user }: { token: string, user: AppUser }) 
                 setInputDir(getDirection(e.target.value));
               }}
               onKeyDown={handleInputKeyDown}
-              className="flex-1 rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:border-indigo-400"
+              className="flex-1 rounded-xl border border-slate-300 px-3 py-2 text-sm text-black placeholder:text-black outline-none focus:border-indigo-400"
               placeholder="Type your message..."
               disabled={isSending}
             />
